@@ -1,0 +1,7 @@
+# Aider ya trae el patron caro->barato nativo. Usalo asi:
+# architect mode: main=frontier (disena), editor=balanced (aplica), weak=haiku (lecturas).
+model: claude-opus-5
+editor-model: claude-sonnet-4-6
+weak-model: claude-haiku-4-5
+architect: true
+# Con proxy: --openai-api-base http://localhost:4000/v1

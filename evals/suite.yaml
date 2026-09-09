@@ -1,0 +1,9 @@
+suite:
+  - {name: bugfix-simple, domain: code, expect_tier: haiku-tier, prompt: "Busca donde esta definida la funcion login y lista sus call sites"}
+  - {name: diseno-auth, domain: reasoning, expect_tier: frontier-tier, prompt: "Disena la arquitectura de autenticacion con refresh tokens, threat model y plan de migracion con rollback"}
+  - {name: research-repo, domain: research, expect_tier: haiku-tier, prompt: "Resume que hace este repositorio y lista sus dependencias"}
+  - {name: ocr-factura, domain: ocr, expect_tier: haiku-tier, prompt: "OCR transcribe esta factura escaneada y extrae total e IVA"}
+  - {name: refactor-modulo, domain: code, expect_tier: balanced-tier, prompt: "Refactoriza el modulo de pagos con ```func Charge()``` separando responsabilidades y agrega tests que lo cubren"}
+  - {name: presentacion, domain: presentation, expect_tier: balanced-tier, prompt: "Escribe el copy de la landing con hero section y propuesta de valor para el lanzamiento"}
+metrics: [pass_rate, cost_usd, savings_pct_vs_all_frontier, escalations]
+gate: barato solo vale si pass_rate no regresa vs frontera.

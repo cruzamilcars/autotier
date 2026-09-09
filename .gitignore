@@ -1,0 +1,10 @@
+autotier.db
+router.log
+autotier.log.jsonl
+*.log.jsonl
+autotier.exe
+autotier
+out/
+bin/
+.idea/
+.vscode/

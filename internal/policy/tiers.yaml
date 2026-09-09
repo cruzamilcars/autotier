@@ -1,0 +1,26 @@
+# simple -> barato, medio -> equilibrado, critico -> frontera.
+# min_tier = piso de calidad (nunca por debajo aunque sea barato).
+# max_cost_usd = techo por request (mejor modelo que quepa en presupuesto).
+tiers:
+  - name: simple
+    complexity_max: 0.35
+    model_tier: haiku-tier
+    max_steps: 8
+    examples: [buscar archivos, leer logs, grep, resumir test output]
+  - name: medio
+    complexity_max: 0.70
+    model_tier: balanced-tier
+    max_steps: 25
+    examples: [implementar feature especificada, refactor, review, migrar archivo]
+  - name: critico
+    complexity_max: 1.0
+    model_tier: frontier-tier
+    max_steps: 40
+    examples: [disenar arquitectura, auth/seguridad, debugging ambiguo, plan release]
+
+modes: # como Cursor Auto: Cost/Balance/Intelligence deslizan toda la curva
+  cost: {quality_floor: 6, bias: cheap}
+  balance: {quality_floor: 7, bias: balanced}
+  intelligence: {quality_floor: 8, bias: quality}
+
+cascade: {max_escalations: 2, quality_gate: [too_short, hedging_phrases, tests_failed]}

@@ -1,0 +1,7 @@
+# Cline: modos Plan vs Act ya separan decision vs ejecucion.
+# Plan mode -> frontier-tier. Act mode -> balanced-tier. Ask/Search -> haiku-tier.
+# Proveedores: apunta api a http://localhost:4000 (proxy) para resolver gratis/sano primero.
+mode_tiers:
+  Plan: frontier-tier
+  Act: balanced-tier
+  Ask: haiku-tier

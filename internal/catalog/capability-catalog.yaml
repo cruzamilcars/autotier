@@ -1,0 +1,31 @@
+# Catalogo vivo: inteligencia por dominio (0-10), ventana, costo, latencia.
+# Actualizar con precios oficiales + benchmarks (SWE-bench, GPQA, OCRBench) + mediciones propias via `autotier eval`.
+# Nunca rutear solo por precio: si barato saca <6 en el dominio requerido, no es elegible.
+models:
+  - id: haiku-tier
+    examples: [claude-haiku-4-5, gpt-4o-mini, kimi-k2-lite]
+    cost_in_per_1m: 1.0
+    cost_out_per_1m: 5.0
+    context_window: 200000
+    latency_p95_ms: 800
+    scores: {code: 6, reasoning: 5, research: 6, presentation: 6, design: 5, data_analysis: 6, ocr: 7, multimodal: 5, tool_use: 6}
+  - id: balanced-tier
+    examples: [claude-sonnet-4-6, gpt-5.x, kimi-k2.5]
+    cost_in_per_1m: 3.0
+    cost_out_per_1m: 15.0
+    context_window: 1000000
+    latency_p95_ms: 2000
+    scores: {code: 8, reasoning: 7, research: 8, presentation: 8, design: 8, data_analysis: 8, ocr: 8, multimodal: 8, tool_use: 8}
+  - id: frontier-tier
+    examples: [claude-opus-5, gpt-5.x-high, kimi-k2-thinking]
+    cost_in_per_1m: 5.0
+    cost_out_per_1m: 25.0
+    context_window: 1000000
+    latency_p95_ms: 4500
+    scores: {code: 10, reasoning: 10, research: 9, presentation: 9, design: 9, data_analysis: 9, ocr: 9, multimodal: 9, tool_use: 9}
+
+# Dialectos tool-call (leccion Windsurf #102): no todos los Kimi hablan igual.
+tool_dialects:
+  kimi-k2: kimi_k2_vllm
+  kimi-k2-thinking: kimi_k2_vllm
+  default_kimi: openai_json_xml
