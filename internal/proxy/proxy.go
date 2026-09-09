@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"strings"
 	"sync"
@@ -16,19 +17,22 @@ import (
 	"github.com/cruzamilcars/autotier/internal/catalog"
 	"github.com/cruzamilcars/autotier/internal/classifier"
 	"github.com/cruzamilcars/autotier/internal/gate"
+	"github.com/cruzamilcars/autotier/internal/learn"
 	"github.com/cruzamilcars/autotier/internal/policy"
 	"github.com/cruzamilcars/autotier/internal/store"
 )
 
 // Config del gateway.
 type Config struct {
-	UpstreamURL string // ej http://localhost:11434/v1 ; vacio = mock
-	Mock        bool
-	LogPath     string
-	Mode        policy.Mode
-	MinTier     string
-	MaxCostUSD  float64
-	AgentsDir   string // registry de agentes nombrados ("agents" por defecto)
+	UpstreamURL    string // ej http://localhost:11434/v1 ; vacio = mock
+	UpstreamAPIKey string // Bearer para upstreams con auth (o env AUTOTIER_API_KEY)
+	Mock           bool
+	LogPath        string
+	Mode           policy.Mode
+	MinTier        string
+	MaxCostUSD     float64
+	AgentsDir      string // registry de agentes nombrados ("agents" por defecto)
+	LearnPath      string // estado bandit JSON (vacio = solo reglas)
 }
 
 type chatMessage struct {
@@ -70,14 +74,18 @@ type chatResponse struct {
 		SavingsPct     float64 `json:"savings_pct"`
 		BudgetExceeded bool    `json:"budget_exceeded"`
 		Agent          string  `json:"agent,omitempty"`
+		Decider        string  `json:"decider,omitempty"`
 	} `json:"autotier"`
 }
 
 // Server expone gateway OpenAI-compatible + health.
 type Server struct {
-	cfg   Config
-	cache map[string]chatResponse
-	mu    sync.Mutex
+	cfg     Config
+	cache   map[string]chatResponse
+	mu      sync.Mutex
+	learn   *learn.State
+	learnMu sync.Mutex
+	rng     *rand.Rand
 }
 
 func New(cfg Config) *Server {
@@ -87,7 +95,52 @@ func New(cfg Config) *Server {
 	if cfg.Mode == "" {
 		cfg.Mode = policy.ModeCost
 	}
-	return &Server{cfg: cfg, cache: map[string]chatResponse{}}
+	s := &Server{cfg: cfg, cache: map[string]chatResponse{}, rng: rand.New(rand.NewSource(time.Now().UnixNano()))}
+	if cfg.LearnPath != "" {
+		if st, err := learn.Load(cfg.LearnPath); err == nil {
+			s.learn = st
+		} else {
+			s.learn = learn.New()
+		}
+	}
+	return s
+}
+
+// decideTier aplica el bandit si hay estado y aprendizaje permitido.
+// El pin de agente fijo siempre gana sobre learn.
+func (s *Server) decideTier(dec policy.Decision, domain string, allowLearn bool) (tier, decider string) {
+	if s.learn == nil || !allowLearn {
+		return dec.Tier, "rules"
+	}
+	s.learnMu.Lock()
+	defer s.learnMu.Unlock()
+	eligible := catalog.Eligible(catalog.Default(), domain, dec.MinScore)
+	out := s.learn.Override(learn.Input{
+		RulesTier: dec.Tier, Eligible: eligible,
+		Complexity: dec.Complexity, Domain: domain, RNG: s.rng,
+	})
+	if out.Reason == "rules-cold" || out.Reason == "rules-unranked" || out.Reason == "rules-ok" {
+		return out.Tier, "rules"
+	}
+	return out.Tier, "learn:" + out.Reason
+}
+
+// observeLearn registra el outcome en el bandit y persiste.
+// El tier inicial aprende de si basto (sin escalacion + pass);
+// el tier final aprende de si resolvio (pass).
+func (s *Server) observeLearn(initialTier, finalTier, domain string, esc int, pass bool) {
+	if s.learn == nil || s.cfg.LearnPath == "" {
+		return
+	}
+	s.learnMu.Lock()
+	defer s.learnMu.Unlock()
+	if initialTier == finalTier {
+		s.learn.Observe(initialTier, domain, pass)
+	} else {
+		s.learn.Observe(initialTier, domain, esc == 0 && pass)
+		s.learn.Observe(finalTier, domain, pass)
+	}
+	_ = s.learn.Save(s.cfg.LearnPath)
 }
 
 func (s *Server) Handler() http.Handler {
@@ -180,9 +233,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		estOut = 512
 	}
 	dec := policy.Decide(complexity, domain, s.cfg.Mode, s.cfg.MinTier, s.cfg.MaxCostUSD, estIn, estOut)
+	tier, decider := s.decideTier(dec, domain, true)
 
 	start := time.Now()
-	text, tier, prov, escalations, err := s.execute(dec.Tier, prompt, estOut, forceFail, req.TestsFailed)
+	text, tier, prov, escalations, err := s.execute(tier, prompt, estOut, forceFail, req.TestsFailed)
 	if err != nil {
 		if strings.Contains(err.Error(), "no healthy provider") {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -223,15 +277,19 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	resp.Router.CostUSD = cost
 	resp.Router.SavingsPct = savings
 	resp.Router.BudgetExceeded = dec.BudgetExceeded
+	resp.Router.Decider = decider
 
+	pass := gate.Check(text, req.TestsFailed).Pass
 	_ = store.Append(s.cfg.LogPath, store.Record{
 		Tier: tier, Provider: resp.Router.Provider, Model: resp.Router.Model,
 		Domain: domain, Mode: string(dec.Mode),
 		InTokens: inT, OutTokens: outT, CostUSD: cost,
 		LatencyMs:   float64(latency.Milliseconds()),
 		Escalations: escalations,
-		QualityPass: gate.Check(text, req.TestsFailed).Pass,
+		QualityPass: pass,
+		Decider:     decider,
 	})
+	s.observeLearn(dec.Tier, tier, domain, escalations, pass)
 
 	s.mu.Lock()
 	s.cache[key] = resp
@@ -252,7 +310,15 @@ func (s *Server) complete(tier, model, prompt string, outTokens int, forcePoor b
 	}
 	b, _ := json.Marshal(payload)
 	client := &http.Client{Timeout: 120 * time.Second}
-	resp, err := client.Post(upstream, "application/json", bytes.NewReader(b))
+	upReq, err := http.NewRequest(http.MethodPost, upstream, bytes.NewReader(b))
+	if err != nil {
+		return "", err
+	}
+	upReq.Header.Set("Content-Type", "application/json")
+	if s.cfg.UpstreamAPIKey != "" {
+		upReq.Header.Set("Authorization", "Bearer "+s.cfg.UpstreamAPIKey)
+	}
+	resp, err := client.Do(upReq)
 	if err != nil {
 		return "", err
 	}

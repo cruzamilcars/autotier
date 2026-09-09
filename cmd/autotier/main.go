@@ -34,6 +34,8 @@ func main() {
 		code = cmdEval(os.Args[2:])
 	case "agent":
 		code = cmdAgent(os.Args[2:])
+	case "learn":
+		code = cmdLearn(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("autotier", version)
 	default:
@@ -45,12 +47,13 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("uso: autotier <init|proxy|status|eval|agent> [flags]")
+	fmt.Println("uso: autotier <init|proxy|status|eval|agent|learn> [flags]")
 	fmt.Println("  init   --system ... --out DIR [--force] [--with-agents] [--agents-dir agents]")
-	fmt.Println("  proxy  --port 4000 [--upstream URL] [--mock] [--log autotier.log.jsonl] [--mode cost|balance|intelligence] [--agents-dir agents]")
+	fmt.Println("  proxy  --port 4000 [--upstream URL] [--api-key KEY|$AUTOTIER_API_KEY] [--mock] [--log autotier.log.jsonl] [--mode cost|balance|intelligence] [--agents-dir agents] [--learn learn.json]")
 	fmt.Println("  status --log autotier.log.jsonl")
 	fmt.Println("  eval   --suite evals/suite.yaml --mode cost|balance|intelligence")
-	fmt.Println("  agent  list|show <nombre>|call <nombre> \"tarea @otro\" [--context f] [--to otro]")
+	fmt.Println("  agent  list|show <nombre>|call <nombre> \"tarea @otro\" [--context f] [--to otro] [--learn learn.json]")
+	fmt.Println("  learn  status|reset [--learn learn.json]")
 	fmt.Println("  (nota: los --flags van ANTES de los posicionales, limite del parser stdlib)")
 }
 
@@ -96,13 +99,17 @@ func cmdProxy(args []string) int {
 	minTier := fs.String("min-tier", "", "piso de calidad (tier id)")
 	maxCost := fs.Float64("max-cost", 0, "techo USD por request")
 	agentsDir := fs.String("agents-dir", "agents", "registry de agentes nombrados")
+	learnPath := fs.String("learn", "", "estado bandit JSON (aprende de outcomes)")
+	apiKey := fs.String("api-key", "", "Bearer upstream (o env AUTOTIER_API_KEY|OPENAI_API_KEY)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
 	srv := proxy.New(proxy.Config{
 		UpstreamURL: *upstream, Mock: *mock || *upstream == "",
-		LogPath: *logPath, Mode: policy.Mode(*mode),
+		UpstreamAPIKey: apiKeyOrEnv(*apiKey),
+		LogPath:        *logPath, Mode: policy.Mode(*mode),
 		MinTier: *minTier, MaxCostUSD: *maxCost, AgentsDir: *agentsDir,
+		LearnPath: *learnPath,
 	})
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}
@@ -155,7 +162,33 @@ func cmdStatus(args []string) int {
 			}
 		}
 	}
+	if len(s.ByDecider) > 0 {
+		fmt.Println("por decisor:")
+		for _, d := range []string{"rules", "learn:learned-cheaper", "learn:learned-escalate"} {
+			if n := s.ByDecider[d]; n > 0 {
+				fmt.Printf("  %-22s %d\n", d, n)
+			}
+		}
+		for d, n := range s.ByDecider {
+			switch d {
+			case "rules", "learn:learned-cheaper", "learn:learned-escalate":
+			default:
+				fmt.Printf("  %-22s %d\n", d, n)
+			}
+		}
+	}
 	return 0
+}
+
+// apiKeyOrEnv resuelve --api-key o env (AUTOTIER_API_KEY, luego OPENAI_API_KEY).
+func apiKeyOrEnv(flag string) string {
+	if flag != "" {
+		return flag
+	}
+	if k := os.Getenv("AUTOTIER_API_KEY"); k != "" {
+		return k
+	}
+	return os.Getenv("OPENAI_API_KEY")
 }
 
 func cmdEval(args []string) int {

@@ -94,6 +94,8 @@ func agentCall(args []string) int {
 	logPath := fs.String("log", "autotier.log.jsonl", "log JSONL")
 	mode := fs.String("mode", "cost", "cost|balance|intelligence")
 	maxTokens := fs.Int("max-tokens", 512, "tope output")
+	learnPath := fs.String("learn", "", "estado bandit JSON (aprende de outcomes)")
+	apiKey := fs.String("api-key", "", "Bearer upstream (o env AUTOTIER_API_KEY|OPENAI_API_KEY)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -109,7 +111,9 @@ func agentCall(args []string) int {
 	}
 	srv := proxy.New(proxy.Config{
 		UpstreamURL: *upstream, Mock: *mock || *upstream == "",
-		LogPath: *logPath, Mode: policy.Mode(*mode), AgentsDir: *dir,
+		UpstreamAPIKey: apiKeyOrEnv(*apiKey),
+		LogPath:        *logPath, Mode: policy.Mode(*mode), AgentsDir: *dir,
+		LearnPath: *learnPath,
 	})
 	call := func(n, t, ctx, parent string, depth int) (proxy.AgentResult, error) {
 		return srv.RunAgent(reg, n, t, proxy.AgentCallOpts{
@@ -146,9 +150,9 @@ func agentCall(args []string) int {
 }
 
 func printAgentResult(res proxy.AgentResult, indent string) {
-	fmt.Printf("%s@%s [%s] c=%.2f domain=%s esc=%d $%.6f ahorro=%.0f%%\n",
+	fmt.Printf("%s@%s [%s] c=%.2f domain=%s esc=%d $%.6f ahorro=%.0f%% via=%s\n",
 		indent, res.Agent, res.Tier, res.Complexity, res.Domain,
-		res.Escalations, res.CostUSD, res.SavingsPct)
+		res.Escalations, res.CostUSD, res.SavingsPct, res.Decider)
 	for _, s := range res.Subs {
 		fmt.Printf("%s  └─ @%s [%s] esc=%d $%.6f\n", indent, s.Agent, s.Tier, s.Escalations, s.CostUSD)
 	}

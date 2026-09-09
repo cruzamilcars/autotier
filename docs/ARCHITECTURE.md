@@ -83,6 +83,8 @@ nativos (@mencionables en Claude/OpenCode/Cursor; nota proxy en el resto).
 
 ## Roadmap aprendizaje
 
-- v0 (este repo): reglas deterministas + catalogo curado + evals.
-- v1: Thompson Sampling sobre el log JSONL (elige tier por prob. exito observada).
+- v0 (hecho): reglas deterministas + catalogo curado + evals.
+- v1 (hecho): Thompson Sampling sobre el log (`--learn learn.json`):
+  brazos tier|dominio con prior optimista Beta(2,1); override de reglas solo
+  con >=5 muestras; `learn status|reset`; campo `decider` en log/status/respuesta.
 - v2: ingesta de benchmarks (SWE-bench, GPQA, OCRBench) al catalogo con evidencia.

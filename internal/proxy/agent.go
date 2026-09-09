@@ -49,6 +49,7 @@ type AgentResult struct {
 	BudgetExceeded bool
 	QualityPass    bool
 	LatencyMs      float64
+	Decider        string
 	Text           string
 	Subs           []SubCall
 }
@@ -158,6 +159,10 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 		tier = dec2.Tier
 		dec.BudgetExceeded = dec2.BudgetExceeded
 	}
+	dec.Tier = tier
+	// El pin del agente gana sobre learn; auto sí aprende.
+	pinned := a.Tier != "auto" && a.Tier != ""
+	tier, decider := s.decideTier(dec, domain, !pinned)
 
 	// 4. Prompt efectivo: system del agente + contexto + tarea.
 	var sb strings.Builder
@@ -203,8 +208,9 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 		InTokens: estIn, OutTokens: outT, CostUSD: cost,
 		LatencyMs:   float64(latency.Milliseconds()),
 		Escalations: esc, QualityPass: qpass,
-		Agent: a.Name, Parent: o.Parent,
+		Agent: a.Name, Parent: o.Parent, Decider: decider,
 	})
+	s.observeLearn(dec.Tier, finalTier, domain, esc, qpass)
 
 	res.Agent = a.Name
 	res.Tier = finalTier
@@ -219,6 +225,7 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 	res.BudgetExceeded = dec.BudgetExceeded
 	res.QualityPass = qpass
 	res.LatencyMs = float64(latency.Milliseconds())
+	res.Decider = decider
 	res.Text = text
 	return res, nil
 }
@@ -273,6 +280,7 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, agentName st
 	out.Router.SavingsPct = res.SavingsPct
 	out.Router.BudgetExceeded = res.BudgetExceeded
 	out.Router.Agent = res.Agent
+	out.Router.Decider = res.Decider
 
 	s.mu.Lock()
 	s.cache[cacheKey(req.Model, res.Agent, prompt)] = out

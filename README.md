@@ -47,6 +47,27 @@ Define los tuyos en `agents/*.md` (frontmatter: tier, delegates, max_steps).
 Tier fijo = pin exacto; `auto` = decide el router. Delegar fuera de la
 allowlist falla con error (no silencioso). Flags antes de posicionales.
 
+## Aprendizaje (Thompson Sampling)
+
+```bash
+go run ./cmd/autotier proxy --learn learn.json              # aprende de cada outcome
+go run ./cmd/autotier learn status --learn learn.json       # brazos tier|dominio: pulls, wins, media
+go run ./cmd/autotier learn reset --learn learn.json
+```
+
+Sin evidencia mandan las reglas (cold start determinista, el eval no cambia).
+Con >=5 muestras por brazo el router baja de tier (`learned-cheaper`) o lo
+sube (`learned-escalate`); el pin de agente fijo siempre gana. El campo
+`decider` en respuesta/log/`status` dice quién decidió. Verificado: tras 12
+fallos de haiku, un prompt trivial rutea directo a balanced con 0 escalaciones.
+
+## Upstream real
+
+```bash
+go run ./cmd/autotier proxy --upstream https://api.openrouter.ai/v1 --api-key $env:OPENROUTER_KEY --mock=false
+# o env AUTOTIER_API_KEY / OPENAI_API_KEY
+```
+
 ## Verificacion (2026-09-09, Go 1.27.1 portable, todo ejecutado)
 
 - `go vet` limpio, `gofmt` limpio, `go test -count=1 ./...` OK (5 pkgs con tests).

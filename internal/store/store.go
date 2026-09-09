@@ -26,6 +26,7 @@ type Record struct {
 	QualityPass bool    `json:"quality_pass"`
 	Agent       string  `json:"agent,omitempty"`
 	Parent      string  `json:"parent,omitempty"`
+	Decider     string  `json:"decider,omitempty"`
 }
 
 type Summary struct {
@@ -37,6 +38,7 @@ type Summary struct {
 	QualityPassPct float64
 	ByTier         map[string]int
 	ByAgent        map[string]int
+	ByDecider      map[string]int
 	P95LatencyMs   float64
 }
 
@@ -81,7 +83,7 @@ func ReadAll(path string) ([]Record, error) {
 }
 
 func Summarize(recs []Record) Summary {
-	s := Summary{ByTier: map[string]int{}, ByAgent: map[string]int{}}
+	s := Summary{ByTier: map[string]int{}, ByAgent: map[string]int{}, ByDecider: map[string]int{}}
 	if len(recs) == 0 {
 		return s
 	}
@@ -95,6 +97,9 @@ func Summarize(recs []Record) Summary {
 		s.ByTier[r.Tier]++
 		if r.Agent != "" {
 			s.ByAgent[r.Agent]++
+		}
+		if r.Decider != "" {
+			s.ByDecider[r.Decider]++
 		}
 		lats = append(lats, r.LatencyMs)
 		if r.QualityPass {
