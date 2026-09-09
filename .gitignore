@@ -1,9 +1,9 @@
 autotier.db
-router.log
+autotier.log
 autotier.log.jsonl
 *.log.jsonl
-autotier.exe
-autotier
+/autotier.exe
+/autotier
 out/
 bin/
 .idea/
