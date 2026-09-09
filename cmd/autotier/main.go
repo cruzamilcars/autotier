@@ -36,6 +36,8 @@ func main() {
 		code = cmdAgent(os.Args[2:])
 	case "learn":
 		code = cmdLearn(os.Args[2:])
+	case "bench":
+		code = cmdBench(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("autotier", version)
 	default:
@@ -47,13 +49,14 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("uso: autotier <init|proxy|status|eval|agent|learn> [flags]")
+	fmt.Println("uso: autotier <init|proxy|status|eval|agent|learn|bench> [flags]")
 	fmt.Println("  init   --system ... --out DIR [--force] [--with-agents] [--agents-dir agents]")
 	fmt.Println("  proxy  --port 4000 [--upstream URL] [--api-key KEY|$AUTOTIER_API_KEY] [--mock] [--log autotier.log.jsonl] [--mode cost|balance|intelligence] [--agents-dir agents] [--learn learn.json]")
 	fmt.Println("  status --log autotier.log.jsonl")
 	fmt.Println("  eval   --suite evals/suite.yaml --mode cost|balance|intelligence")
 	fmt.Println("  agent  list|show <nombre>|call <nombre> \"tarea @otro\" [--context f] [--to otro] [--learn learn.json]")
 	fmt.Println("  learn  status|reset [--learn learn.json]")
+	fmt.Println("  bench  report|import [--bench-dir internal/bench/data] [--write]")
 	fmt.Println("  (nota: los --flags van ANTES de los posicionales, limite del parser stdlib)")
 }
 
@@ -137,6 +140,9 @@ func cmdStatus(args []string) int {
 	}
 	s := store.Summarize(recs)
 	fmt.Printf("requests:      %d\n", s.Requests)
+	if s.CacheHits > 0 {
+		fmt.Printf("cache hits:    %d\n", s.CacheHits)
+	}
 	fmt.Printf("costo total:   $%.4f\n", s.TotalCostUSD)
 	fmt.Printf("costo frontera:$%.4f\n", s.FrontierCost)
 	fmt.Printf("ahorro:        %.1f%%\n", s.SavingsPct)

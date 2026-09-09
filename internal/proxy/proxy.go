@@ -9,6 +9,7 @@ import (
 	"io"
 	"math/rand"
 	"net/http"
+	"os"
 	"strings"
 	"sync"
 	"time"
@@ -44,18 +45,22 @@ type chatRequest struct {
 	Model       string        `json:"model"`
 	Messages    []chatMessage `json:"messages"`
 	MaxTokens   int           `json:"max_tokens"`
+	Stream      bool          `json:"stream,omitempty"`
 	TestsFailed bool          `json:"tests_failed,omitempty"`
 	Agent       string        `json:"agent,omitempty"`
 }
 
 type chatChoice struct {
-	Index   int         `json:"index"`
-	Message chatMessage `json:"message"`
+	Index        int         `json:"index"`
+	Message      chatMessage `json:"message"`
+	FinishReason string      `json:"finish_reason,omitempty"`
 }
 
 type chatResponse struct {
 	ID      string       `json:"id"`
 	Object  string       `json:"object"`
+	Created int64        `json:"created,omitempty"`
+	Model   string       `json:"model,omitempty"`
 	Choices []chatChoice `json:"choices"`
 	Usage   struct {
 		PromptTokens     int `json:"prompt_tokens"`
@@ -148,9 +153,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.Write([]byte("ok"))
 	})
+	mux.HandleFunc("/v1/models", serveModels)
 	mux.HandleFunc("/v1/chat/completions", s.handleChat)
 	mux.HandleFunc("/v1/messages", s.handleAnthropic)
 	return mux
+}
+
+// serveModels lista virtual + ejemplos (algunos clientes validan el catalogo).
+func serveModels(w http.ResponseWriter, _ *http.Request) {
+	ids := []string{"auto"}
+	for _, m := range catalog.Default() {
+		ids = append(ids, m.Examples...)
+	}
+	type item struct {
+		ID     string `json:"id"`
+		Object string `json:"object"`
+	}
+	out := map[string]any{"object": "list"}
+	var data []item
+	for _, id := range ids {
+		data = append(data, item{ID: id, Object: "model"})
+	}
+	out["data"] = data
+	writeJSON(w, out)
 }
 
 func lastUserText(ms []chatMessage) string {
@@ -189,6 +214,14 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "bad body", http.StatusBadRequest)
 		return
 	}
+	// AUTOTIER_DUMP=1 vuelca el body crudo (debug de compatibilidad con harnesses).
+	if os.Getenv("AUTOTIER_DUMP") == "1" {
+		f, _ := os.OpenFile(s.cfg.LogPath+".dump", os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if f != nil {
+			fmt.Fprintf(f, "### %s %s\n%s\n", r.Method, r.URL.Path, truncate(string(body), 4000))
+			f.Close()
+		}
+	}
 	var req chatRequest
 	if err := json.Unmarshal(body, &req); err != nil {
 		http.Error(w, "bad json", http.StatusBadRequest)
@@ -222,6 +255,16 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	if hit, ok := s.cache[key]; ok {
 		s.mu.Unlock()
+		_ = store.Append(s.cfg.LogPath, store.Record{
+			Tier: hit.Router.Tier, Provider: hit.Router.Provider, Model: hit.Router.Model,
+			Domain: hit.Router.Domain, Mode: hit.Router.Mode,
+			InTokens: hit.Usage.PromptTokens, OutTokens: hit.Usage.CompletionTokens,
+			LatencyMs: 0, QualityPass: true, Cached: true, Decider: "cache",
+		})
+		if req.Stream {
+			writeSSE(w, hit.Choices[0].Message.Content, hit.ID)
+			return
+		}
 		writeJSON(w, hit)
 		return
 	}
@@ -261,7 +304,8 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := chatResponse{ID: "chatcmpl-autotier", Object: "chat.completion"}
-	resp.Choices = []chatChoice{{Index: 0, Message: chatMessage{Role: "assistant", Content: text}}}
+	resp.Created = time.Now().Unix()
+	resp.Choices = []chatChoice{{Index: 0, Message: chatMessage{Role: "assistant", Content: text}, FinishReason: "stop"}}
 	resp.Usage.PromptTokens = inT
 	resp.Usage.CompletionTokens = outT
 	resp.Usage.TotalTokens = inT + outT
@@ -278,6 +322,9 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	resp.Router.SavingsPct = savings
 	resp.Router.BudgetExceeded = dec.BudgetExceeded
 	resp.Router.Decider = decider
+	if prov != nil {
+		resp.Model = prov.Model
+	}
 
 	pass := gate.Check(text, req.TestsFailed).Pass
 	_ = store.Append(s.cfg.LogPath, store.Record{
@@ -294,6 +341,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	s.mu.Lock()
 	s.cache[key] = resp
 	s.mu.Unlock()
+	if req.Stream {
+		writeSSE(w, text, resp.ID)
+		return
+	}
 	writeJSON(w, resp)
 }
 
@@ -430,6 +481,48 @@ func (c *captureWriter) WriteHeader(s int) { c.status = s }
 func writeJSON(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	_ = json.NewEncoder(w).Encode(v)
+}
+
+// writeSSE emite la respuesta en Server-Sent Events (clientes como OpenCode
+// piden stream:true). Trocea en 3 partes, cierra con finish_reason:stop
+// (sin esto algunos SDK repiten la llamada en loop) y luego [DONE].
+func writeSSE(w http.ResponseWriter, text, id string) {
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	emit := func(v any) {
+		b, _ := json.Marshal(v)
+		fmt.Fprintf(w, "data: %s\n\n", b)
+		if f, ok := w.(http.Flusher); ok {
+			f.Flush()
+		}
+	}
+	runes := []rune(text)
+	n := len(runes)
+	parts := 3
+	if n < 3 {
+		parts = 1
+	}
+	for i := 0; i < parts; i++ {
+		chunk := string(runes[i*n/parts : (i+1)*n/parts])
+		emit(map[string]any{
+			"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(),
+			"choices": []map[string]any{
+				{"index": 0, "delta": map[string]string{"content": chunk}},
+			},
+		})
+	}
+	emit(map[string]any{
+		"id": id, "object": "chat.completion.chunk", "created": time.Now().Unix(),
+		"choices": []map[string]any{
+			{"index": 0, "delta": map[string]string{}, "finish_reason": "stop"},
+		},
+		"usage": map[string]int{
+			"prompt_tokens": estimateTokens(text), "completion_tokens": estimateTokens(text),
+			"total_tokens": 2 * estimateTokens(text),
+		},
+	})
+	fmt.Fprint(w, "data: [DONE]\n\n")
 }
 
 func truncate(s string, n int) string {

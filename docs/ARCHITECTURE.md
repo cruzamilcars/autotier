@@ -87,4 +87,5 @@ nativos (@mencionables en Claude/OpenCode/Cursor; nota proxy en el resto).
 - v1 (hecho): Thompson Sampling sobre el log (`--learn learn.json`):
   brazos tier|dominio con prior optimista Beta(2,1); override de reglas solo
   con >=5 muestras; `learn status|reset`; campo `decider` en log/status/respuesta.
-- v2: ingesta de benchmarks (SWE-bench, GPQA, OCRBench) al catalogo con evidencia.
+- v2 (hecho): ingesta de benchmarks (`bench report|import --write`) al catalogo con evidencia.
+- v3: más fuentes por dominio (OCR, multimodal) y pesos por recencia.

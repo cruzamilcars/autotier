@@ -58,8 +58,10 @@ type AgentResult struct {
 // Extraido del handler para reusarlo en llamadas de agentes.
 func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed bool) (text, finalTier string, prov *provider.Candidate, escalations int, err error) {
 	outTokens := estOut
-	if outTokens > 1024 {
-		outTokens = 1024
+	// Respetar el max_tokens del cliente (harnesses como OpenCode piden 32k);
+	// techo alto solo contra valores absurdos. El gasto se controla con maxCostUSD.
+	if outTokens > 65536 {
+		outTokens = 65536
 	}
 	finalTier = tier
 	for attempt := 0; attempt <= 2; attempt++ {
@@ -265,7 +267,9 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, agentName st
 		return
 	}
 	out := chatResponse{ID: "chatcmpl-autotier-agent", Object: "chat.completion"}
-	out.Choices = []chatChoice{{Index: 0, Message: chatMessage{Role: "assistant", Content: res.Text}}}
+	out.Created = time.Now().Unix()
+	out.Model = res.Model
+	out.Choices = []chatChoice{{Index: 0, Message: chatMessage{Role: "assistant", Content: res.Text}, FinishReason: "stop"}}
 	out.Usage.PromptTokens = estimateTokens(prompt + res.Text)
 	out.Usage.CompletionTokens = estimateTokens(res.Text)
 	out.Usage.TotalTokens = out.Usage.PromptTokens + out.Usage.CompletionTokens
@@ -285,5 +289,9 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, agentName st
 	s.mu.Lock()
 	s.cache[cacheKey(req.Model, res.Agent, prompt)] = out
 	s.mu.Unlock()
+	if req.Stream {
+		writeSSE(w, res.Text, out.ID)
+		return
+	}
 	writeJSON(w, out)
 }

@@ -27,10 +27,12 @@ type Record struct {
 	Agent       string  `json:"agent,omitempty"`
 	Parent      string  `json:"parent,omitempty"`
 	Decider     string  `json:"decider,omitempty"`
+	Cached      bool    `json:"cached,omitempty"`
 }
 
 type Summary struct {
 	Requests       int
+	CacheHits      int
 	TotalCostUSD   float64
 	FrontierCost   float64
 	SavingsPct     float64
@@ -90,6 +92,10 @@ func Summarize(recs []Record) Summary {
 	lats := make([]float64, 0, len(recs))
 	pass := 0
 	for _, r := range recs {
+		if r.Cached {
+			s.CacheHits++
+			continue // no duplica costo ni requests
+		}
 		s.Requests++
 		s.TotalCostUSD += r.CostUSD
 		s.FrontierCost += catalog.FrontierCost(r.InTokens, r.OutTokens)

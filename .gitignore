@@ -2,7 +2,8 @@ autotier.db
 autotier.log
 autotier.log.jsonl
 *.log.jsonl
-/autotier.exe
+*.exe
+*~
 /autotier
 out/
 bin/

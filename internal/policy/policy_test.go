@@ -41,12 +41,12 @@ func TestEscalate(t *testing.T) {
 
 func TestBudgetCap(t *testing.T) {
 	// Presupuesto que no alcanza ni frontera para 1M tokens.
-	// El piso de calidad manda: baja hasta el elegible mas barato (balanced,
-	// reasoning=7 >= floor 6) y marca budget_exceeded. Nunca cae a haiku
-	// porque haiku (reasoning=5) no cumple el floor.
+	// El piso de calidad manda: baja hasta el elegible mas barato y marca
+	// budget_exceeded. Nota: con evidencia bench, haiku reasoning=6, por eso
+	// el elegible mas barato en cost (floor 6) es haiku, no balanced.
 	d := Decide(0.95, "reasoning", ModeCost, "", 0.50, 1000000, 100000)
-	if d.Tier != catalog.TierBalanced {
-		t.Fatalf("con techo bajo debe bajar a balanced (piso), got %s", d.Tier)
+	if d.Tier != catalog.TierHaiku {
+		t.Fatalf("con techo bajo debe bajar a haiku (piso), got %s", d.Tier)
 	}
 	if !d.BudgetExceeded {
 		t.Fatalf("debio marcar budget_exceeded")

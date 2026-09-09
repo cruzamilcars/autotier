@@ -32,7 +32,7 @@ const (
 )
 
 func Default() []Model {
-	return []Model{
+	out := []Model{
 		{
 			ID:            TierHaiku,
 			Examples:      []string{"claude-haiku-4-5", "gpt-4o-mini", "kimi-k2-lite"},
@@ -73,6 +73,15 @@ func Default() []Model {
 			},
 		},
 	}
+	// Overlay de evidencia auditada (`autotier bench import`, ver catalog.gen.go).
+	for i := range out {
+		if ov, ok := generatedScores[out[i].ID]; ok {
+			for d, sc := range ov {
+				out[i].Scores[d] = sc
+			}
+		}
+	}
+	return out
 }
 
 func ByID(models []Model, id string) *Model {

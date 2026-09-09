@@ -1,0 +1,20 @@
+# Fuente: benchlm.ai/benchmarks/swe-bench-verified (snapshot Sep 2026).
+# Dominio: code. Escala: % resolved (mayor = mejor).
+# Solo modelos con edicion agentic comparable; nada de marketing vendor.
+name: swe-bench-verified
+domain: code
+url: https://benchlm.ai/benchmarks/swe-bench-verified
+date: 2026-09-09
+weight: 1
+exclude:
+  # sin exclusiones en esta fuente
+scores:
+  claude-opus-5: 96.0
+  claude-sonnet-5: 85.2
+  claude-sonnet-4-6: 79.6
+  claude-sonnet-4-5: 77.2
+  claude-haiku-4-5: 73.3
+  kimi-k2-6: 80.2
+  kimi-k2-5: 76.8
+  gpt-5-2: 80.0
+  gpt-5-1: 76.3
