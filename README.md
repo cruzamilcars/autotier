@@ -27,6 +27,8 @@ autotier doctor   # verifica que decide de verdad
 |---|---|
 | OpenCode | Provider custom al proxy (verificado end-to-end) + `agent.<id>.model`, `small_model` |
 | Claude Code | Subagentes exportados (`model: haiku/sonnet/opus/inherit`) + proxy `/v1/messages` |
+| DeepSeek Harness | Plugin `dsh-plugin-autotier` (`plugins/`, tools `autotier_route/call/status`) |
+| Cualquier harness MCP | `autotier mcp serve` (stdio): `route_decide`, `agent_call`, `cost_status` |
 | Cursor | Réplica abierta del Auto Router (Cost/Balance/Intelligence) |
 | Cline | Modos Plan/Act/Ask + proxy |
 | Windsurf Cascade | Vía proxy (dialectos Kimi switching incluidos) |

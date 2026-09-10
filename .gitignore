@@ -7,5 +7,7 @@ autotier.log.jsonl
 /autotier
 out/
 bin/
+node_modules/
+plugins/*/lib/
 .idea/
 .vscode/

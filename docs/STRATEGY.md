@@ -19,6 +19,14 @@ no otro harness más. Suiza, no competidor.
 Orden: MCP para alcance → proxy como producto → plugins donde el hook dé
 poder real (OpenCode plugin, `dsh-plugin`).
 
+## dsh-plugin (hecho 2026-09-10, `plugins/dsh-plugin-autotier/`)
+
+Tool plugin delgado (solo superficie estable: `name`/`inject`/`apply`,
+`defineTool`, `exec.signal`): `autotier_route`, `autotier_call`,
+`autotier_status` por encima del binario Go. Verificado con `tsc` + 5 smoke
+contra binario real. El adaptador LLM profundo (`LlmAdapter`) queda como
+opción futura si el hook demuestra tracción.
+
 ## Harness propio / fork: NO (evaluado 2026-09-10)
 
 `deepseek-ai/deepseek-harness` (`dsh`, "everything is a plugin"): 219k★,

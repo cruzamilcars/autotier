@@ -1,0 +1,43 @@
+{
+  "name": "dsh-plugin-autotier",
+  "version": "0.1.0",
+  "description": "Autotier model routing for DeepSeek Harness: route agent tasks to cheap models first, escalate only on failure.",
+  "type": "module",
+  "main": "lib/index.js",
+  "types": "lib/index.d.ts",
+  "files": [
+    "lib/index.js",
+    "lib/index.d.ts",
+    "lib/runner.js",
+    "lib/runner.d.ts"
+  ],
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "llm-router",
+    "model-routing",
+    "cost-optimization",
+    "ai-agents"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/cruzamilcars/autotier",
+    "directory": "plugins/dsh-plugin-autotier"
+  },
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=0.0.0",
+    "@deepseek-ai/dsh-tools": ">=0.0.0"
+  },
+  "devDependencies": {
+    "@deepseek-ai/cordis": "latest",
+    "@deepseek-ai/dsh-tools": "latest",
+    "@types/node": "^22.20.2",
+    "typescript": "^5.6.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "test": "node --test test/smoke.test.mjs"
+  }
+}

@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased (dsh-plugin)
+
+- `plugins/dsh-plugin-autotier`: tool plugin (`autotier_route/call/status`)
+  sobre el binario Go, con `tsc` limpio + 5 smoke tests contra binario real.
+- Estrategia documentada en `docs/STRATEGY.md` (capas, no-fork, decision log).
+
 ## Unreleased (control y confianza)
 
 - `route`: dry-run que explica la decisión sin gastar ($0, 0 llamadas).
