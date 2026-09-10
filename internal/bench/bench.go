@@ -234,6 +234,7 @@ type Cell struct {
 	Blended  int
 	Changed  bool
 	Sources  []string
+	From     []string // "fuente:alias=valor" (procedencia fina por celda)
 }
 
 // Report cruza catalogo con evidencia para los dominios con datos.
@@ -267,7 +268,7 @@ func Report(models []catalog.Model, sources []Source, wPrior, wEv float64, asOf 
 			out = append(out, Cell{
 				Tier: m.ID, Domain: d, Prior: m.ScoreFor(d),
 				Evidence: e.Score, N: e.N, Blended: b,
-				Changed: b != m.ScoreFor(d), Sources: srcs,
+				Changed: b != m.ScoreFor(d), Sources: srcs, From: e.From,
 			})
 		}
 	}
