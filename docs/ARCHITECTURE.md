@@ -88,4 +88,7 @@ nativos (@mencionables en Claude/OpenCode/Cursor; nota proxy en el resto).
   brazos tier|dominio con prior optimista Beta(2,1); override de reglas solo
   con >=5 muestras; `learn status|reset`; campo `decider` en log/status/respuesta.
 - v2 (hecho): ingesta de benchmarks (`bench report|import --write`) al catalogo con evidencia.
-- v3: más fuentes por dominio (OCR, multimodal) y pesos por recencia.
+- v3 (hecho): mas fuentes por dominio (MMMU->multimodal, OCRBench->ocr) y pesos
+  por recencia (decaimiento exponencial por edad, `--as-of`, `--recency-half-life`).
+  El blend parte siempre de los priors curados (`Priors()`), no del ultimo
+  blend, para no hacer ratchet hacia la evidencia.

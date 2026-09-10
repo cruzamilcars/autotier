@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased (v3)
+
+- Bench: MMMU->multimodal y OCRBench->ocr (con URLs y fechas); recencia con
+  decaimiento exponencial (`--as-of`, `--recency-half-life`, `--recency-min`).
+- El blend parte de priors curados (`Priors()`), sin ratchet entre imports.
+- Cambios aplicados: haiku multimodal 5→7, balanced ocr 8→9.
+
 ## v0.1.0 — 2026-09-09
 
 Router universal de modelos para sistemas de agentes + agentes nombrados +

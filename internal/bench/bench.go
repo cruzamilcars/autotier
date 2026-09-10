@@ -12,11 +12,13 @@ package bench
 import (
 	"bufio"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cruzamilcars/autotier/internal/catalog"
 )
@@ -149,15 +151,55 @@ func parseFile(path string) (Source, error) {
 	return s, sc.Err()
 }
 
-// TierEvidence promedia la evidencia 0-10 por tier para un dominio.
-func TierEvidence(models []catalog.Model, sources []Source, domain string) map[string]Evidence {
+// RecencyFactor decae el peso con la edad: 0.5^(dias/halfLife), piso minF.
+// Fechas futuras o halfLife<=0 (desactivado) devuelven 1. Formato YYYY-MM-DD.
+func RecencyFactor(sourceDate, asOf string, halfLifeDays, minF float64) float64 {
+	if halfLifeDays <= 0 {
+		return 1
+	}
+	const layout = "2006-01-02"
+	sd, err1 := time.Parse(layout, strings.TrimSpace(sourceDate))
+	ad, err2 := time.Parse(layout, strings.TrimSpace(asOf))
+	if err1 != nil || err2 != nil {
+		return 1
+	}
+	age := ad.Sub(sd).Hours() / 24
+	if age <= 0 {
+		return 1
+	}
+	f := math.Pow(0.5, age/halfLifeDays)
+	if f < minF {
+		f = minF
+	}
+	return f
+}
+
+// EffectiveWeights combina peso manual x recencia por fuente.
+func EffectiveWeights(sources []Source, asOf string, halfLifeDays, minF float64) map[string]float64 {
+	out := map[string]float64{}
+	for _, s := range sources {
+		out[s.Name] = s.Weight * RecencyFactor(s.Date, asOf, halfLifeDays, minF)
+	}
+	return out
+}
+
+// TierEvidence promedia la evidencia 0-10 por tier para un dominio,
+// ponderada por peso efectivo de cada fuente.
+func TierEvidence(models []catalog.Model, sources []Source, domain string, weights map[string]float64) map[string]Evidence {
 	out := map[string]Evidence{}
 	for _, m := range models {
-		var vals []float64
+		var sum, wsum float64
 		var from []string
+		n := 0
 		for _, src := range sources {
 			if src.Domain != domain {
 				continue
+			}
+			w := 1.0
+			if weights != nil {
+				if ew, ok := weights[src.Name]; ok {
+					w = ew
+				}
 			}
 			for _, ex := range m.Examples {
 				for _, al := range aliasMap[ex] {
@@ -166,20 +208,18 @@ func TierEvidence(models []catalog.Model, sources []Source, domain string) map[s
 						continue
 					}
 					if v, ok := src.Scores[key]; ok {
-						vals = append(vals, v/10.0)
+						sum += (v / 10.0) * w
+						wsum += w
+						n++
 						from = append(from, src.Name+":"+key+"="+fmt.Sprintf("%.1f", v))
 					}
 				}
 			}
 		}
-		if len(vals) == 0 {
+		if n == 0 || wsum == 0 {
 			continue
 		}
-		sum := 0.0
-		for _, v := range vals {
-			sum += v
-		}
-		out[m.ID] = Evidence{Score: sum / float64(len(vals)), N: len(vals), From: from}
+		out[m.ID] = Evidence{Score: sum / wsum, N: n, From: from}
 	}
 	return out
 }
@@ -197,7 +237,9 @@ type Cell struct {
 }
 
 // Report cruza catalogo con evidencia para los dominios con datos.
-func Report(models []catalog.Model, sources []Source, wPrior, wEv float64) []Cell {
+// wPrior/wEv ponderan prior vs evidencia; asOf/halfLife/minF, la recencia.
+func Report(models []catalog.Model, sources []Source, wPrior, wEv float64, asOf string, halfLife, minF float64) []Cell {
+	weights := EffectiveWeights(sources, asOf, halfLife, minF)
 	domains := map[string]bool{}
 	for _, s := range sources {
 		domains[s.Domain] = true
@@ -209,7 +251,7 @@ func Report(models []catalog.Model, sources []Source, wPrior, wEv float64) []Cel
 	sort.Strings(doms)
 	var out []Cell
 	for _, d := range doms {
-		ev := TierEvidence(models, sources, d)
+		ev := TierEvidence(models, sources, d, weights)
 		var srcs []string
 		for _, s := range sources {
 			if s.Domain == d {

@@ -1,0 +1,21 @@
+# Fuente: anotherwrapper.com/tools/llm-pricing/evals/mmmu (20 Ago 2026, metodologia MMMU val).
+# Dominio: multimodal. Escala: % accuracy (mayor = mejor).
+# Solo variantes MMMU val: NO mezclar con MMMU-Pro (escala distinta, ~10pts menos).
+name: mmmu
+domain: multimodal
+url: https://anotherwrapper.com/tools/llm-pricing/evals/mmmu
+date: 2026-08-20
+weight: 1
+exclude:
+  # sin exclusiones en esta fuente
+scores:
+  claude-opus-5: 89.9
+  claude-opus-4-8: 86.6
+  claude-opus-4-7: 85.5
+  claude-opus-4-5: 80.7
+  claude-sonnet-5: 83.0
+  claude-haiku-4-5: 80.7
+  kimi-k2-6: 86.3
+  gpt-5-2: 86.7
+  gpt-5-1: 85.4
+  gpt-5: 84.2

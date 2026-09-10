@@ -4,17 +4,21 @@ package catalog
 
 // generatedScores sobreescribe priors curados con blend evidencia+prior.
 var generatedScores = map[string]Scores{
-	"balanced-tier": {"code": 8, "reasoning": 8},
-	"frontier-tier": {"code": 9, "reasoning": 9},
-	"haiku-tier":    {"code": 7, "reasoning": 6},
+	"balanced-tier": {"code": 8, "multimodal": 8, "ocr": 9, "reasoning": 8},
+	"frontier-tier": {"code": 9, "multimodal": 9, "reasoning": 9},
+	"haiku-tier": {"code": 7, "multimodal": 7, "reasoning": 6},
 }
 
 // generatedProvenance documenta fuente y fecha por celda aplicada.
 var generatedProvenance = map[string]string{
-	"balanced-tier|code":      "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
-	"balanced-tier|reasoning": "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
-	"frontier-tier|code":      "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
-	"frontier-tier|reasoning": "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
-	"haiku-tier|code":         "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
-	"haiku-tier|reasoning":    "gpqa-diamond@2026-09-09, swe-bench-verified@2026-09-09",
+	"balanced-tier|code": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"balanced-tier|multimodal": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"balanced-tier|ocr": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"balanced-tier|reasoning": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"frontier-tier|code": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"frontier-tier|multimodal": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"frontier-tier|reasoning": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"haiku-tier|code": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"haiku-tier|multimodal": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
+	"haiku-tier|reasoning": "gpqa-diamond@2026-09-09, mmmu@2026-08-20, ocrbench@2026-07-31, swe-bench-verified@2026-09-09",
 }

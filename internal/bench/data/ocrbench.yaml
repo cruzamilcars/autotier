@@ -1,0 +1,12 @@
+# Fuente: llm-stats.com/benchmarks/ocrbench (Jul 2026, escala OCRBench v1 0-1 -> %).
+# Dominio: ocr. Escala: score % (mayor = mejor).
+# NO mezclar con OCRBench v2 (escala distinta, promedio ~60).
+name: ocrbench
+domain: ocr
+url: https://llm-stats.com/benchmarks/ocrbench
+date: 2026-07-31
+weight: 1
+exclude:
+  # sin exclusiones en esta fuente
+scores:
+  kimi-k2-5: 92.3

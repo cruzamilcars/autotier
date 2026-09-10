@@ -32,6 +32,21 @@ const (
 )
 
 func Default() []Model {
+	out := Priors()
+	// Overlay de evidencia auditada (`autotier bench import`, ver catalog.gen.go).
+	for i := range out {
+		if ov, ok := generatedScores[out[i].ID]; ok {
+			for d, sc := range ov {
+				out[i].Scores[d] = sc
+			}
+		}
+	}
+	return out
+}
+
+// Priors son los valores curados a mano. El blend de bench siempre parte de
+// aqui (no del ultimo blend) para no hacer ratchet hacia la evidencia.
+func Priors() []Model {
 	out := []Model{
 		{
 			ID:            TierHaiku,
@@ -72,14 +87,6 @@ func Default() []Model {
 				"ocr": 9, "multimodal": 9, "tool_use": 9, "general": 9,
 			},
 		},
-	}
-	// Overlay de evidencia auditada (`autotier bench import`, ver catalog.gen.go).
-	for i := range out {
-		if ov, ok := generatedScores[out[i].ID]; ok {
-			for d, sc := range ov {
-				out[i].Scores[d] = sc
-			}
-		}
 	}
 	return out
 }

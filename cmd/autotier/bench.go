@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/cruzamilcars/autotier/internal/bench"
 	"github.com/cruzamilcars/autotier/internal/catalog"
@@ -31,6 +32,9 @@ func benchReport(args []string, write bool) int {
 	benchDir := fs.String("bench-dir", filepath.Join("internal", "bench", "data"), "fuentes yaml")
 	wPrior := fs.Float64("prior-weight", 1, "peso del prior curado")
 	wEv := fs.Float64("evidence-weight", 1, "peso de la evidencia")
+	asOf := fs.String("as-of", time.Now().Format("2006-01-02"), "fecha de referencia para recencia")
+	halfLife := fs.Float64("recency-half-life", 180, "vida media en dias (<=0 desactiva recencia)")
+	minF := fs.Float64("recency-min", 0.2, "piso del factor de recencia")
 	doWrite := fs.Bool("write", false, "aplicar al catalogo (solo con import)")
 	if err := fs.Parse(args); err != nil {
 		return 1
@@ -44,8 +48,8 @@ func benchReport(args []string, write bool) int {
 		fmt.Println("sin fuentes en", *benchDir)
 		return 1
 	}
-	models := catalog.Default()
-	cells := bench.Report(models, sources, *wPrior, *wEv)
+	models := catalog.Priors()
+	cells := bench.Report(models, sources, *wPrior, *wEv, *asOf, *halfLife, *minF)
 	fmt.Printf("%-13s %-11s %5s %8s %3s %7s %7s\n", "TIER", "DOMINIO", "prior", "evidencia", "n", "blend", "cambio")
 	for _, c := range cells {
 		mark := ""
@@ -56,9 +60,10 @@ func benchReport(args []string, write bool) int {
 			c.Tier, c.Domain, c.Prior, c.Evidence, c.N, c.Blended, mark)
 	}
 	fmt.Println("fuentes:")
+	ew := bench.EffectiveWeights(sources, *asOf, *halfLife, *minF)
 	for _, s := range sources {
-		fmt.Printf("  - %s [%s] %s (%s) peso=%.1f scores=%d excl=%d\n",
-			s.Name, s.Domain, s.URL, s.Date, s.Weight, len(s.Scores), len(s.Exclude))
+		fmt.Printf("  - %s [%s] %s (%s) peso=%.1f recencia=%.2f scores=%d excl=%d\n",
+			s.Name, s.Domain, s.URL, s.Date, s.Weight, ew[s.Name], len(s.Scores), len(s.Exclude))
 	}
 	if !write || !*doWrite {
 		fmt.Println("(solo reporte; `bench import --write` para aplicar)")
@@ -69,7 +74,7 @@ func benchReport(args []string, write bool) int {
 		fmt.Println("error:", err)
 		return 1
 	}
-	ap, err := bench.Import(models, sources, *wPrior, *wEv, cwd)
+	ap, err := bench.Import(models, sources, *wPrior, *wEv, *asOf, *halfLife, *minF, cwd)
 	if err != nil {
 		fmt.Println("error:", err)
 		return 1

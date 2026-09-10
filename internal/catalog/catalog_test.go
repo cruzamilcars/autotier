@@ -20,6 +20,13 @@ func TestGeneratedOverlayApplies(t *testing.T) {
 	if got := byID[TierBalanced].ScoreFor("code"); got != 8 {
 		t.Fatalf("balanced code debe quedar 8, got %d", got)
 	}
+	// v3: multimodal (MMMU) y ocr (OCRBench).
+	if got := byID[TierHaiku].ScoreFor("multimodal"); got != 7 {
+		t.Fatalf("haiku multimodal con evidencia = %d, want 7", got)
+	}
+	if got := byID[TierBalanced].ScoreFor("ocr"); got != 9 {
+		t.Fatalf("balanced ocr con evidencia = %d, want 9", got)
+	}
 	if len(generatedProvenance) == 0 {
 		t.Fatalf("provenance vacia")
 	}

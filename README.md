@@ -93,7 +93,9 @@ go run ./cmd/autotier bench import --write                      # aplica a capab
 ```
 
 Fuentes con fecha y URL en `internal/bench/data/` (SWE-bench Verified, GPQA
-Diamond). Nada se aplica sin `--write`; las exclusiones van documentadas.
+Diamond, MMMU, OCRBench). Nada se aplica sin `--write`; las exclusiones van
+documentadas. Recencia: el peso decae con la edad
+(`--as-of`, `--recency-half-life` 180d, `--recency-min` 0.2).
 
 ## Estructura
 

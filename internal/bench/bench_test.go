@@ -50,10 +50,10 @@ func TestTierEvidenceRealData(t *testing.T) {
 	if err != nil {
 		t.Skipf("sin data dir en test: %v", err)
 	}
-	if len(sources) != 2 {
-		t.Fatalf("se esperaban 2 fuentes, got %d", len(sources))
+	if len(sources) != 4 {
+		t.Fatalf("se esperaban 4 fuentes, got %d", len(sources))
 	}
-	ev := TierEvidence(catalog.Default(), sources, "code")
+	ev := TierEvidence(catalog.Priors(), sources, "code", nil)
 	// frontier: opus-5 9.6, gpt 8.0/7.63, k2-thinking sin dato
 	f, ok := ev["frontier-tier"]
 	if !ok || f.N == 0 {
@@ -63,10 +63,22 @@ func TestTierEvidenceRealData(t *testing.T) {
 		t.Fatalf("evidencia frontier code fuera de rango: %.2f", f.Score)
 	}
 	// exclusion documentada: sonnet-4-6 no debe contaminar reasoning
-	evR := TierEvidence(catalog.Default(), sources, "reasoning")
+	evR := TierEvidence(catalog.Priors(), sources, "reasoning", nil)
 	for _, fr := range evR["balanced-tier"].From {
 		if strings.Contains(fr, "sonnet-4-6") {
 			t.Fatalf("exclusion no honrada: %s", fr)
 		}
+	}
+	// nuevos dominios v3: multimodal (MMMU) y ocr (OCRBench)
+	evM := TierEvidence(catalog.Priors(), sources, "multimodal", nil)
+	if evM["frontier-tier"].N == 0 || evM["haiku-tier"].N == 0 {
+		t.Fatalf("multimodal sin evidencia: %+v", evM)
+	}
+	evO := TierEvidence(catalog.Priors(), sources, "ocr", nil)
+	if got := evO["balanced-tier"]; got.N != 1 || got.Score < 9.2 || got.Score > 9.3 {
+		t.Fatalf("ocr balanced debe ser kimi-k2-5 9.23: %+v", got)
+	}
+	if _, ok := evO["frontier-tier"]; ok {
+		t.Fatalf("frontier no tiene evidencia ocr y no debe aparecer")
 	}
 }

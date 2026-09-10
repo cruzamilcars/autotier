@@ -20,8 +20,8 @@ type Applied struct {
 	Sources  []Source
 }
 
-func Import(models []catalog.Model, sources []Source, wPrior, wEv float64, repoRoot string) (Applied, error) {
-	cells := Report(models, sources, wPrior, wEv)
+func Import(models []catalog.Model, sources []Source, wPrior, wEv float64, asOf string, halfLife, minF float64, repoRoot string) (Applied, error) {
+	cells := Report(models, sources, wPrior, wEv, asOf, halfLife, minF)
 	final := map[string]map[string]int{} // tier -> domain -> score
 	for _, m := range models {
 		final[m.ID] = map[string]int{}
