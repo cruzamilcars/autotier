@@ -9,6 +9,14 @@ Clasifica complejidad en <2ms (sin llamada LLM extra), rutea al modelo barato
 primero y escala solo si falla. Aprende con Thompson Sampling. Verificado con
 eval suite 6/6 y loop real contra OpenCode.
 
+## Instalación
+
+```bash
+go install github.com/cruzamilcars/autotier/cmd/autotier@latest
+# o descarga el binario de Releases (windows/linux/mac) y ponlo en tu PATH
+autotier doctor   # verifica que decide de verdad
+```
+
 > Problema: en OpenCode, Claude Code, Codex, Cursor, Cline, Windsurf, Aider
 > debes elegir el modelo a mano — pagas frontier donde un barato resuelve igual.
 > Solución: `orquestador capaz -> workers baratos -> juez capaz`, automático.
