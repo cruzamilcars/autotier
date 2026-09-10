@@ -96,6 +96,8 @@ func agentCall(args []string) int {
 	maxTokens := fs.Int("max-tokens", 512, "tope output")
 	learnPath := fs.String("learn", "", "estado bandit JSON (aprende de outcomes)")
 	apiKey := fs.String("api-key", "", "Bearer upstream (o env AUTOTIER_API_KEY|OPENAI_API_KEY)")
+	denyS := fs.String("deny", "", "veto de tiers (fail closed)")
+	pinF := fs.String("pin", "", "tier forzado (gana a todo salvo deny, no entrena)")
 	if err := fs.Parse(args); err != nil {
 		return 1
 	}
@@ -105,6 +107,11 @@ func agentCall(args []string) int {
 		return 1
 	}
 	name, task := strings.ToLower(rest[0]), rest[1]
+	deny, err := policy.ParseDeny(*denyS)
+	if err != nil {
+		fmt.Println("error:", err)
+		return 1
+	}
 	reg, code := loadRegistry(*dir)
 	if code != 0 {
 		return code
@@ -119,6 +126,7 @@ func agentCall(args []string) int {
 		return srv.RunAgent(reg, n, t, proxy.AgentCallOpts{
 			Context: ctx, Parent: parent, Depth: depth,
 			MaxTokens: *maxTokens, Mode: policy.Mode(*mode),
+			Deny: deny, Pin: *pinF,
 		})
 	}
 	var ctx string

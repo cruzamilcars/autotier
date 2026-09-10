@@ -38,6 +38,12 @@ func main() {
 		code = cmdLearn(os.Args[2:])
 	case "bench":
 		code = cmdBench(os.Args[2:])
+	case "route":
+		code = cmdRoute(os.Args[2:])
+	case "doctor":
+		code = cmdDoctor(os.Args[2:])
+	case "mcp":
+		code = cmdMCP(os.Args[2:])
 	case "version", "--version", "-v":
 		fmt.Println("autotier", version)
 	default:
@@ -49,7 +55,7 @@ func main() {
 }
 
 func usage() {
-	fmt.Println("uso: autotier <init|proxy|status|eval|agent|learn|bench> [flags]")
+	fmt.Println("uso: autotier <init|proxy|status|eval|agent|learn|bench|mcp|route|doctor> [flags]")
 	fmt.Println("  init   --system ... --out DIR [--force] [--with-agents] [--agents-dir agents]")
 	fmt.Println("  proxy  --port 4000 [--upstream URL] [--api-key KEY|$AUTOTIER_API_KEY] [--mock] [--log autotier.log.jsonl] [--mode cost|balance|intelligence] [--agents-dir agents] [--learn learn.json]")
 	fmt.Println("  status --log autotier.log.jsonl")
@@ -57,6 +63,8 @@ func usage() {
 	fmt.Println("  agent  list|show <nombre>|call <nombre> \"tarea @otro\" [--context f] [--to otro] [--learn learn.json]")
 	fmt.Println("  learn  status|reset [--learn learn.json]")
 	fmt.Println("  bench  report|import [--bench-dir internal/bench/data] [--write]")
+	fmt.Println("  route  [--mode cost] [--deny ...] [--min-tier ...] [--max-cost N] [--learn f] \"prompt\"  (dry-run, $0)")
+	fmt.Println("  doctor [--proxy URL] [--agents-dir agents]  (¿esta activo y decide de verdad?)")
 	fmt.Println("  (nota: los --flags van ANTES de los posicionales, limite del parser stdlib)")
 }
 
@@ -101,10 +109,16 @@ func cmdProxy(args []string) int {
 	mode := fs.String("mode", "cost", "cost|balance|intelligence")
 	minTier := fs.String("min-tier", "", "piso de calidad (tier id)")
 	maxCost := fs.Float64("max-cost", 0, "techo USD por request")
+	denyS := fs.String("deny", "", "veto global de tiers (fail closed)")
 	agentsDir := fs.String("agents-dir", "agents", "registry de agentes nombrados")
 	learnPath := fs.String("learn", "", "estado bandit JSON (aprende de outcomes)")
 	apiKey := fs.String("api-key", "", "Bearer upstream (o env AUTOTIER_API_KEY|OPENAI_API_KEY)")
 	if err := fs.Parse(args); err != nil {
+		return 1
+	}
+	deny, err := policy.ParseDeny(*denyS)
+	if err != nil {
+		fmt.Println("error:", err)
 		return 1
 	}
 	srv := proxy.New(proxy.Config{
@@ -112,7 +126,7 @@ func cmdProxy(args []string) int {
 		UpstreamAPIKey: apiKeyOrEnv(*apiKey),
 		LogPath:        *logPath, Mode: policy.Mode(*mode),
 		MinTier: *minTier, MaxCostUSD: *maxCost, AgentsDir: *agentsDir,
-		LearnPath: *learnPath,
+		LearnPath: *learnPath, Deny: deny,
 	})
 	addr := fmt.Sprintf("127.0.0.1:%d", *port)
 	httpSrv := &http.Server{Addr: addr, Handler: srv.Handler(), ReadHeaderTimeout: 10 * time.Second}

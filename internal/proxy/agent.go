@@ -26,6 +26,8 @@ type AgentCallOpts struct {
 	MinTier     string
 	MaxCostUSD  float64
 	Mode        policy.Mode
+	Deny        []string // tiers vetados (fail closed si no queda alternativa)
+	Pin         string   // tier forzado por el usuario (gana a todo salvo deny)
 }
 
 type SubCall struct {
@@ -56,7 +58,7 @@ type AgentResult struct {
 
 // execute corre el cascade barato-primero para un prompt ya resuelto.
 // Extraido del handler para reusarlo en llamadas de agentes.
-func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed bool) (text, finalTier string, prov *provider.Candidate, escalations int, err error) {
+func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed bool, deny []string) (text, finalTier string, prov *provider.Candidate, escalations int, err error) {
 	outTokens := estOut
 	// Respetar el max_tokens del cliente (harnesses como OpenCode piden 32k);
 	// techo alto solo contra valores absurdos. El gasto se controla con maxCostUSD.
@@ -73,7 +75,8 @@ func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed
 		text, err = s.complete(finalTier, prov.Model, prompt, outTokens, attempt == 0 && forceFail)
 		if err != nil {
 			// Circuit-breaker minimal: si falla el upstream, probar siguiente rung.
-			if next, ok := policy.Escalate(finalTier); ok {
+			// El cascade nunca entra a un tier vetado: ahi termina (best effort).
+			if next, ok := escalateAllowed(finalTier, deny); ok {
 				finalTier = next
 				escalations++
 				continue
@@ -81,7 +84,7 @@ func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed
 			return "", finalTier, prov, escalations, err
 		}
 		if g := gate.Check(text, testsFailed); !g.Pass {
-			if next, ok := policy.Escalate(finalTier); ok && attempt < 2 {
+			if next, ok := escalateAllowed(finalTier, deny); ok && attempt < 2 {
 				finalTier = next
 				escalations++
 				continue
@@ -90,6 +93,20 @@ func (s *Server) execute(tier, prompt string, estOut int, forceFail, testsFailed
 		break
 	}
 	return text, finalTier, prov, escalations, nil
+}
+
+// escalateAllowed sube un rung salvo que este vetado (deny) o sea el tope.
+func escalateAllowed(tier string, deny []string) (string, bool) {
+	next, ok := policy.Escalate(tier)
+	if !ok {
+		return tier, false
+	}
+	for _, d := range deny {
+		if d == next {
+			return tier, false
+		}
+	}
+	return next, true
 }
 
 // RunAgent ejecuta un agente nombrado con delegacion @menciones.
@@ -104,6 +121,11 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 	}
 	if o.Depth > agents.MaxDepthCap {
 		return res, fmt.Errorf("profundidad maxima %d superada en @%s", agents.MaxDepthCap, a.Name)
+	}
+	// Deny global del servidor como default (el veto por llamada manda si viene).
+	deny := o.Deny
+	if len(deny) == 0 {
+		deny = s.cfg.Deny
 	}
 	mode := o.Mode
 	if mode == "" {
@@ -138,6 +160,7 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 			Parent: a.Name, Depth: o.Depth + 1,
 			MaxTokens: o.MaxTokens, TestsFailed: o.TestsFailed,
 			MinTier: o.MinTier, MaxCostUSD: o.MaxCostUSD, Mode: mode,
+			Deny: deny,
 		})
 		if err != nil {
 			return res, err
@@ -152,19 +175,55 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 	complexity := classifier.Score(clean, false, hasImage, len(ctxParts))
 	domain := classifier.DetectDomain(clean)
 
-	// 3. Tier: fijo del agente o policy si auto.
+	// 3. Tier: pin del usuario > fijo del agente > policy(auto) > learn.
+	// El pin gana a todo salvo deny (fail closed). Lo pineado no entrena.
 	minTier := o.MinTier
 	dec := a.ResolveTier(complexity, domain, mode, o.MaxCostUSD, 800, 512)
 	tier := dec.Tier
-	if minTier != "" {
-		dec2 := policy.Decide(complexity, domain, mode, minTier, o.MaxCostUSD, 800, 512)
-		tier = dec2.Tier
-		dec.BudgetExceeded = dec2.BudgetExceeded
+	decider := ""
+	if o.Pin != "" {
+		pin, ok := policy.NormalizeTier(o.Pin)
+		if !ok {
+			return res, fmt.Errorf("pin desconocido: %q", o.Pin)
+		}
+		for _, d := range deny {
+			if d == pin {
+				return res, fmt.Errorf("pin %s esta en deny %v", pin, deny)
+			}
+		}
+		tier = pin
+		dec.Tier = pin
+		decider = "pin"
+	} else {
+		if minTier != "" {
+			dec2 := policy.Decide(complexity, domain, mode, minTier, o.MaxCostUSD, 800, 512)
+			tier = dec2.Tier
+			dec.BudgetExceeded = dec2.BudgetExceeded
+		}
+		if len(deny) > 0 {
+			dec2, err := policy.DecideWith(complexity, domain, mode, minTier, deny, o.MaxCostUSD, 800, 512)
+			if err != nil {
+				return res, err
+			}
+			// DecideWith respeta minTier y deny; solo aplica si el agente es auto
+			// (el pin del agente fijo ya se valido abajo).
+			if a.Tier == "auto" || a.Tier == "" {
+				tier = dec2.Tier
+				dec.BudgetExceeded = dec2.BudgetExceeded
+			}
+		}
+		dec.Tier = tier
+		// El pin del agente gana sobre learn; auto sí aprende.
+		pinned := a.Tier != "auto" && a.Tier != ""
+		if pinned {
+			for _, d := range deny {
+				if d == tier {
+					return res, fmt.Errorf("@%s corre en %s pero esta en deny %v", a.Name, tier, deny)
+				}
+			}
+		}
+		tier, decider = s.decideTier(dec, domain, !pinned)
 	}
-	dec.Tier = tier
-	// El pin del agente gana sobre learn; auto sí aprende.
-	pinned := a.Tier != "auto" && a.Tier != ""
-	tier, decider := s.decideTier(dec, domain, !pinned)
 
 	// 4. Prompt efectivo: system del agente + contexto + tarea.
 	var sb strings.Builder
@@ -184,7 +243,7 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 	}
 
 	start := time.Now()
-	text, finalTier, prov, esc, err := s.execute(tier, fullPrompt, estOut, o.ForceFail, o.TestsFailed)
+	text, finalTier, prov, esc, err := s.execute(tier, fullPrompt, estOut, o.ForceFail, o.TestsFailed, deny)
 	if err != nil {
 		return res, err
 	}
@@ -212,7 +271,10 @@ func (s *Server) RunAgent(reg map[string]agents.Agent, name, task string, o Agen
 		Escalations: esc, QualityPass: qpass,
 		Agent: a.Name, Parent: o.Parent, Decider: decider,
 	})
-	s.observeLearn(dec.Tier, finalTier, domain, esc, qpass)
+	// Lo pineado por el usuario no entrena al bandit (no fue decision del router).
+	if decider != "pin" {
+		s.observeLearn(dec.Tier, finalTier, domain, esc, qpass)
+	}
 
 	res.Agent = a.Name
 	res.Tier = finalTier
@@ -254,9 +316,15 @@ func (s *Server) serveAgent(w http.ResponseWriter, r *http.Request, agentName st
 	if maxT <= 0 {
 		maxT = 512
 	}
+	deny, denyErr := policy.ParseDeny(firstNonEmpty(r.Header.Get("X-Autotier-Deny"), req.Deny, strings.Join(s.cfg.Deny, ",")))
+	if denyErr != nil {
+		http.Error(w, denyErr.Error(), http.StatusBadRequest)
+		return
+	}
 	res, err := s.RunAgent(reg, agentName, prompt, AgentCallOpts{
 		MaxTokens: maxT, TestsFailed: req.TestsFailed, ForceFail: forceFail,
 		MinTier: s.cfg.MinTier, MaxCostUSD: s.cfg.MaxCostUSD, Mode: s.cfg.Mode,
+		Deny: deny, Pin: firstNonEmpty(r.Header.Get("X-Autotier-Pin"), req.Pin),
 	})
 	if err != nil {
 		code := http.StatusBadRequest

@@ -55,6 +55,38 @@ OpenCode contra el proxy (verificado con `opencode run` real):
       "limit": { "context": 200000, "output": 65536 } } } } } }
 ```
 
+## Control: activar, verificar, vetar, detener
+
+**Activar / desactivar.** Autotier no se mete solo: solo decide cuando el
+tráfico pasa por él. Activar = apuntar el harness al proxy (`baseURL`,
+`OPENAI_BASE_URL`, provider custom) o invocar `agent call`. Desactivar =
+quitar esa config y volver a tu modelo directo. Nada queda residente salvo
+el proceso `proxy` que tú levantaste (Ctrl-C lo baja).
+
+**¿Hace algo de verdad o es pantalla?** Tres pruebas sin gastar un dólar:
+
+```bash
+autotier route "tu prompt real"     # dry-run: que decidiría y por qué, $0
+autotier doctor --proxy URL         # PASS/FAIL: proxy, modelos, ruteo con ahorro
+autotier status                     # ahorro_vs_frontera, quality pass, decisor por request
+```
+
+Cada respuesta trae `tier`, `decider` (rules|learn|pin|cache) y `savings_pct`.
+Si `savings_pct` es ~0 o `quality pass` < 100% sostenido, no te está ayudando:
+apágalo y abre un issue con el log.
+
+**Vetar un modelo (antes y durante).** `--deny` en proxy/agent/MCP/route,
+o headers `X-Autotier-Deny` / campo `deny` por request. Si el veto no deja
+alternativa, **falla cerrado con error** — nunca corre un tier prohibido en
+silencio, ni siquiera por escalación del cascade. `--pin` (o `X-Autotier-Pin`)
+fuerza un tier exacto para ese request; lo pineado no entrena al bandit.
+El pin de agente fijo siempre gana sobre learn.
+
+**¿Puedo pararlo a mitad?** En CLI sí (Ctrl-C, es tu proceso). En proxy cada
+request es corto: el control real es por-request (pin/deny/`max_cost_usd`),
+no un botón de pánico — diseñado así a propósito: sin estado a medio correr
+que corromper.
+
 ## Agentes nombrados
 
 ```bash

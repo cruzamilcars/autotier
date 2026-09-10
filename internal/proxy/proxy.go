@@ -32,8 +32,9 @@ type Config struct {
 	Mode           policy.Mode
 	MinTier        string
 	MaxCostUSD     float64
-	AgentsDir      string // registry de agentes nombrados ("agents" por defecto)
-	LearnPath      string // estado bandit JSON (vacio = solo reglas)
+	AgentsDir      string   // registry de agentes nombrados ("agents" por defecto)
+	LearnPath      string   // estado bandit JSON (vacio = solo reglas)
+	Deny           []string // veto global de tiers (fail closed)
 }
 
 type chatMessage struct {
@@ -48,6 +49,8 @@ type chatRequest struct {
 	Stream      bool          `json:"stream,omitempty"`
 	TestsFailed bool          `json:"tests_failed,omitempty"`
 	Agent       string        `json:"agent,omitempty"`
+	Pin         string        `json:"pin,omitempty"`
+	Deny        string        `json:"deny,omitempty"`
 }
 
 type chatChoice struct {
@@ -178,6 +181,15 @@ func serveModels(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, out)
 }
 
+func firstNonEmpty(vs ...string) string {
+	for _, v := range vs {
+		if strings.TrimSpace(v) != "" {
+			return v
+		}
+	}
+	return ""
+}
+
 func lastUserText(ms []chatMessage) string {
 	for i := len(ms) - 1; i >= 0; i-- {
 		if ms[i].Role == "user" {
@@ -275,11 +287,44 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 	if estOut <= 0 {
 		estOut = 512
 	}
-	dec := policy.Decide(complexity, domain, s.cfg.Mode, s.cfg.MinTier, s.cfg.MaxCostUSD, estIn, estOut)
-	tier, decider := s.decideTier(dec, domain, true)
+	// Veto: flag global + request (campo deny o header X-Autotier-Deny).
+	deny, denyErr := policy.ParseDeny(firstNonEmpty(r.Header.Get("X-Autotier-Deny"), req.Deny, strings.Join(s.cfg.Deny, ",")))
+	if denyErr != nil {
+		http.Error(w, denyErr.Error(), http.StatusBadRequest)
+		return
+	}
+	// Pin: tier forzado por el usuario (campo pin o header X-Autotier-Pin).
+	pin := firstNonEmpty(r.Header.Get("X-Autotier-Pin"), req.Pin)
+	decider := ""
+	tier := ""
+	var dec policy.Decision
+	if pin != "" {
+		p, ok := policy.NormalizeTier(pin)
+		if !ok {
+			http.Error(w, "pin desconocido: "+pin, http.StatusBadRequest)
+			return
+		}
+		for _, d := range deny {
+			if d == p {
+				http.Error(w, fmt.Sprintf("pin %s esta en deny %v", p, deny), http.StatusBadRequest)
+				return
+			}
+		}
+		tier, decider = p, "pin"
+		dec = policy.Decide(complexity, domain, s.cfg.Mode, s.cfg.MinTier, s.cfg.MaxCostUSD, estIn, estOut)
+		dec.Tier = tier
+	} else {
+		var err error
+		dec, err = policy.DecideWith(complexity, domain, s.cfg.Mode, s.cfg.MinTier, deny, s.cfg.MaxCostUSD, estIn, estOut)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		tier, decider = s.decideTier(dec, domain, true)
+	}
 
 	start := time.Now()
-	text, tier, prov, escalations, err := s.execute(tier, prompt, estOut, forceFail, req.TestsFailed)
+	text, tier, prov, escalations, err := s.execute(tier, prompt, estOut, forceFail, req.TestsFailed, deny)
 	if err != nil {
 		if strings.Contains(err.Error(), "no healthy provider") {
 			http.Error(w, err.Error(), http.StatusBadGateway)
@@ -336,7 +381,10 @@ func (s *Server) handleChat(w http.ResponseWriter, r *http.Request) {
 		QualityPass: pass,
 		Decider:     decider,
 	})
-	s.observeLearn(dec.Tier, tier, domain, escalations, pass)
+	// Lo pineado por el usuario no entrena al bandit.
+	if decider != "pin" {
+		s.observeLearn(dec.Tier, tier, domain, escalations, pass)
+	}
 
 	s.mu.Lock()
 	s.cache[key] = resp

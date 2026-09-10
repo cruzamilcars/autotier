@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased (control y confianza)
+
+- `route`: dry-run que explica la decisión sin gastar ($0, 0 llamadas).
+- `doctor`: PASS/FAIL de que el proxy decide de verdad (no pantalla).
+- `--deny` global/por-request/header + `DecideWith` fail-closed; el cascade
+  nunca escala a un tier vetado. Typos en deny = error, no silencio.
+- `--pin` / `X-Autotier-Pin`: tier forzado por request; no entrena al bandit.
+- `decider` ahora distingue rules|learn|pin|cache en respuesta, log y status.
+- README: sección Control (activar/verificar/vetar/detener).
+
 ## Unreleased (v3)
 
 - Bench: MMMU->multimodal y OCRBench->ocr (con URLs y fechas); recencia con
